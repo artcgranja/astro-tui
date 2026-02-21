@@ -11,8 +11,8 @@ from astro_context import (
     Agent,
     MemoryManager,
     SimpleGraphMemory,
+    memory_skill,
 )
-from astro_context.agent.tools import memory_tools
 from astro_context.models.context import ContextResult
 from astro_context.models.memory import ConversationTurn, MemoryEntry
 from astro_context.storage.json_file_store import JsonFileMemoryStore
@@ -27,6 +27,50 @@ _STOP_WORDS = frozenset({
     "not", "no", "but", "or", "and", "if", "so", "than", "very",
     "i", "me", "my", "we", "you", "your", "he", "she", "they", "their",
 })
+
+
+def _build_system_prompt(graph: SimpleGraphMemory) -> str:
+    """Build a system prompt that encourages natural conversation.
+
+    Includes a live snapshot of the entity graph so the model can
+    reference relationships between saved facts organically.
+    """
+    parts = [
+        "You are Astro, a friendly and helpful AI assistant with long-term memory.",
+        "",
+        "You remember things about the user across conversations. "
+        "Previously saved facts are already visible in your context — "
+        "there is no need to re-save what you can already see.",
+        "",
+        "## When to use memory tools",
+        "- **save_fact**: When the user shares something genuinely new and important "
+        "(personal details, preferences, goals, projects). Avoid saving trivia or small talk.",
+        "- **search_facts**: When you need to recall something you might have saved before.",
+        "- **update_fact**: When a previously saved fact becomes outdated "
+        "(e.g., user changes age, job, or preference). Prefer updating over delete+re-save.",
+        "- **delete_fact**: When a fact is simply wrong or no longer relevant.",
+        "",
+        "## Conversation style",
+        "Be natural and conversational. Use the user's name when it feels right. "
+        "Reference what you remember organically — don't announce that you're "
+        "\"checking memory\" or \"saving a fact\". Just know things and be helpful.",
+    ]
+
+    # Inject graph context if it has any relationships
+    rels = graph.relationships
+    if rels:
+        parts.append("")
+        parts.append("## Knowledge graph")
+        parts.append("Connections between things you know about the user:")
+        for source, relation, target in rels[:20]:
+            parts.append(f"  {source} --[{relation}]--> {target}")
+
+    parts.append("")
+    parts.append(
+        "You are running inside astro-tui, a terminal chat app powered by astro-context."
+    )
+
+    return "\n".join(parts)
 
 
 class ChatEngine:
@@ -56,7 +100,10 @@ class ChatEngine:
         # Track which facts have been synced to the graph (by ID)
         self._synced_fact_ids: set[str] = {f.id for f in self._fact_store.list_all()}
 
-        # Agent with system prompt, memory, and tools
+        # Rebuild graph from any existing persisted facts
+        self._rebuild_graph()
+
+        # Agent with system prompt, memory, and memory skill
         self._agent = (
             Agent(
                 model="claude-sonnet-4-20250514",
@@ -64,31 +111,10 @@ class ChatEngine:
                 max_tokens=16384,
                 max_response_tokens=2048,
             )
-            .with_system_prompt(
-                "You are Astro, a helpful AI assistant with long-term memory.\n\n"
-                "## Memory Management Rules\n"
-                "You have access to persistent memory tools: save_fact, search_facts, "
-                "update_fact, and delete_fact.\n\n"
-                "CRITICAL: Previously saved facts are already visible in your context. "
-                "Do NOT re-save facts that you can already see.\n\n"
-                "Before saving a new fact:\n"
-                "1. Check if the information is already in your context (it usually is).\n"
-                "2. If unsure, use search_facts to verify.\n"
-                "3. If a similar fact exists but needs updating, use update_fact with its ID.\n"
-                "4. Only use save_fact for genuinely NEW information.\n\n"
-                "When information changes (e.g., user corrects their age), "
-                "use update_fact on the existing fact instead of saving a duplicate.\n"
-                "Use delete_fact to remove outdated or incorrect facts.\n\n"
-                "Do NOT save trivial or transient information "
-                "(e.g., greetings, small talk, questions about capabilities).\n\n"
-                "You are running inside astro-tui, a terminal chat app powered by astro-context."
-            )
+            .with_system_prompt(_build_system_prompt(self._graph))
             .with_memory(self._memory)
-            .with_tools(memory_tools(self._memory))
+            .with_skill(memory_skill(self._memory))
         )
-
-        # Rebuild graph from any existing persisted facts
-        self._rebuild_graph()
 
     # -- Public API --
 
@@ -96,8 +122,10 @@ class ChatEngine:
         """Send a user message and yield streaming response chunks."""
         for chunk in self._agent.chat(message):
             yield chunk
-        # After streaming completes, check if new facts were saved
+        # After streaming completes, sync new facts to graph
         self._sync_graph()
+        # Refresh system prompt with updated graph context
+        self._agent.with_system_prompt(_build_system_prompt(self._graph))
 
     def handle_command(self, text: str) -> str | None:
         """Handle slash commands. Returns None if not a command."""
