@@ -1,0 +1,136 @@
+/* astro-tui global stylesheet */
+
+Screen {
+    layout: vertical;
+}
+
+/* Shared layout patterns */
+.split-horizontal {
+    layout: horizontal;
+    height: 1fr;
+}
+
+.sidebar {
+    width: 30%;
+    border-left: solid $secondary;
+    padding: 0 1;
+}
+
+.main-content {
+    width: 70%;
+    padding: 0 1;
+}
+
+.half-left {
+    width: 50%;
+    padding: 0 1;
+}
+
+.half-right {
+    width: 50%;
+    border-left: solid $secondary;
+    padding: 0 1;
+}
+
+/* Feature card styling */
+.feature-card {
+    margin: 1 2;
+    padding: 1 2;
+    border: solid $primary;
+    background: $surface;
+}
+
+.feature-card:hover {
+    border: solid $accent;
+}
+
+/* DataTable enhancements */
+DataTable {
+    height: 1fr;
+}
+
+/* Tab content spacing */
+TabPane {
+    padding: 1;
+}
+
+/* Consistent button row */
+.button-row {
+    layout: horizontal;
+    height: auto;
+    padding: 1 0;
+}
+
+.button-row Button {
+    margin: 0 1;
+}
+
+/* Input row */
+.input-row {
+    layout: horizontal;
+    height: auto;
+    padding: 1 0;
+    align: left middle;
+}
+
+.input-row Input {
+    width: 1fr;
+    margin: 0 1;
+}
+
+.input-row Select {
+    width: 30;
+    margin: 0 1;
+}
+
+/* Status bar */
+.status-bar {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    padding: 0 1;
+}
+
+/* Welcome/Home screen */
+.welcome-title {
+    text-align: center;
+    text-style: bold;
+    padding: 2 0;
+    color: $accent;
+}
+
+.welcome-subtitle {
+    text-align: center;
+    color: $text-muted;
+    padding: 0 0 2 0;
+}
+
+/* Chat screen */
+.chat-log {
+    height: 1fr;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+.chat-input {
+    dock: bottom;
+    height: auto;
+    padding: 1 0;
+}
+
+/* Metric display */
+.metric-value {
+    text-style: bold;
+    color: $accent;
+}
+
+.metric-label {
+    color: $text-muted;
+}
+
+/* No data placeholder */
+.placeholder {
+    text-align: center;
+    color: $text-muted;
+    padding: 4;
+}
